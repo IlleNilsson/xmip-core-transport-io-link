@@ -371,13 +371,7 @@ impl Loopback for IoLinkTransport {
     /// In order on one thread: the device answers as the master writes, so
     /// the write goes first and the read-back finds what it left.
     fn round(&self, payload: &[u8]) -> Result<Arrived> {
-        let far = self.far_end()?;
-        self.send_to(far.address(), payload)?;
-        let arrived = far.take_one()?;
-        if arrived.bytes != payload {
-            return Err(protocol_error("written, but what was read back differs"));
-        }
-        Ok(arrived)
+        self.round_in_order(payload)
     }
 }
 
