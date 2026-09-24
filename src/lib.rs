@@ -31,7 +31,9 @@ pub use device::Device;
 pub use isdu::{DATA_MAX, Isdu};
 pub use m_sequence::{Channel, DeviceMessage, Kind, MasterMessage};
 use serial::{Framing, SerialTransport};
+use transport::arrived::next_arrival;
 use transport::error::{Result, protocol_error};
+use transport::held::Held;
 use transport::loopback::{FarEnd, LOOPBACK_TIMEOUT, Loopback};
 use transport::{Arrived, Directions, Transport};
 
@@ -248,11 +250,9 @@ impl IoLinkTransport {
         self.line
             .clone()
             .framed(Framing::Fixed(length))
-            .receive()?
-            .into_iter()
-            .next()
+            .receive()
+            .and_then(|arrived| next_arrival(arrived, "nothing came off the line"))
             .map(|arrived| arrived.bytes)
-            .ok_or_else(|| protocol_error("nothing came off the line"))
     }
 
     /// The parameter a target names, or the configured one.
@@ -325,26 +325,6 @@ impl IoLinkTransport {
     }
 }
 
-/// The device holding what the master wrote, until it is read back.
-struct Holding {
-    master: IoLinkTransport,
-    address: String,
-}
-
-impl FarEnd for Holding {
-    fn address(&self) -> &str {
-        &self.address
-    }
-
-    fn take_one(self: Box<Self>) -> Result<Arrived> {
-        self.master
-            .receive()?
-            .into_iter()
-            .next()
-            .ok_or_else(|| protocol_error("nothing came back from the device"))
-    }
-}
-
 impl Loopback for IoLinkTransport {
     /// A Stream travels as one ISDU, and an ISDU is at most 238 bytes with
     /// its framing.
@@ -352,14 +332,16 @@ impl Loopback for IoLinkTransport {
         Some(DATA_MAX)
     }
 
+    /// The device holding what the master wrote, until it is read back.
     fn far_end(&self) -> Result<Box<dyn FarEnd>> {
         if self.device.is_none() {
             return Err(protocol_error("a port with no device attached in-process"));
         }
-        Ok(Box::new(Holding {
-            master: self.clone(),
-            address: self.origin(self.index, self.subindex),
-        }))
+        let master = self.clone();
+        Ok(Box::new(Held::new(
+            self.origin(self.index, self.subindex),
+            move || next_arrival(master.receive()?, "nothing came back from the device"),
+        )))
     }
 
     fn send_to(&self, address: &str, payload: &[u8]) -> Result<()> {

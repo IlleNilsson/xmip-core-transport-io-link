@@ -10,6 +10,7 @@
 //! with `START`, counts the bytes it sends, and reads the answer back the
 //! same way; a device still working answers `BUSY`.
 
+use transport::ceiling;
 use transport::error::{Result, protocol_error};
 
 /// The longest ISDU there is: what the extended length byte can name.
@@ -108,12 +109,7 @@ impl Isdu {
     }
 
     fn new(service: Service, index: u16, subindex: u8, data: &[u8]) -> Result<Self> {
-        if data.len() > DATA_MAX {
-            return Err(protocol_error(format!(
-                "{} bytes is over the {DATA_MAX} one ISDU carries",
-                data.len()
-            )));
-        }
+        ceiling::within(data.len(), DATA_MAX, "one ISDU carries")?;
         Ok(Self {
             service,
             index,
