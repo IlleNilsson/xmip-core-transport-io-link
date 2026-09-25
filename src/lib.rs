@@ -348,12 +348,10 @@ impl Loopback for IoLinkTransport {
         self.send(address, payload)
     }
 
-    fn unblock(&self, _address: &str) {}
-
     /// In order on one thread: the device answers as the master writes, so
     /// the write goes first and the read-back finds what it left.
-    fn round(&self, payload: &[u8]) -> Result<Arrived> {
-        self.round_in_order(payload)
+    fn exchanges_in_order(&self) -> bool {
+        true
     }
 }
 
