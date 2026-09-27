@@ -23,6 +23,7 @@
 pub mod device;
 pub mod isdu;
 pub mod m_sequence;
+mod settings;
 
 use std::sync::{Arc, Mutex, PoisonError};
 use std::time::{Duration, Instant};
@@ -42,6 +43,10 @@ use crate::isdu::Service;
 /// The parameter a Stream travels as unless a target says otherwise: the
 /// first vendor-specific index.
 pub const STREAM_PARAMETER: (u16, u8) = (0x0100, 0);
+
+/// How long a master waits on a device that stays busy unless a Location
+/// says.
+pub const DEFAULT_TIMEOUT: Duration = Duration::from_secs(1);
 
 /// The master's side of one port, speaking to the device on it.
 #[derive(Clone)]
@@ -64,7 +69,7 @@ impl IoLinkTransport {
             process_in: 0,
             index: STREAM_PARAMETER.0,
             subindex: STREAM_PARAMETER.1,
-            timeout: Duration::from_secs(1),
+            timeout: DEFAULT_TIMEOUT,
         }
     }
 
