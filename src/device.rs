@@ -14,7 +14,7 @@ use crate::isdu::{self, Isdu, Service};
 use crate::m_sequence::{Channel, DeviceMessage, MasterMessage};
 
 /// The error a negative response carries for an index that is not there.
-pub const INDEX_NOT_AVAILABLE: [u8; 2] = [0x80, 0x11];
+const INDEX_NOT_AVAILABLE: [u8; 2] = [0x80, 0x11];
 
 /// One device.
 pub struct Device {
@@ -75,7 +75,8 @@ impl Device {
     }
 
     /// What the device presents as process data in from now on.
-    pub fn set_process_in(&mut self, bytes: &[u8]) {
+    #[cfg(test)]
+    fn set_process_in(&mut self, bytes: &[u8]) {
         self.process_in = bytes.to_vec();
     }
 

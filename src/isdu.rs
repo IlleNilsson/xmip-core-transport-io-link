@@ -10,7 +10,7 @@
 //! with `START`, counts the bytes it sends, and reads the answer back the
 //! same way; a device still working answers `BUSY`.
 
-use transport::ceiling;
+use net::ceiling;
 use transport::error::{Result, protocol_error};
 
 /// The longest ISDU there is: what the extended length byte can name.
@@ -33,7 +33,6 @@ pub const COUNT_MASK: u8 = 0x0f;
 /// What a device answers on the ISDU channel while it is still working,
 /// and when it has no service to answer.
 pub const BUSY: u8 = 0x01;
-pub const NO_SERVICE: u8 = 0x00;
 
 /// The I-Service codes this crate speaks: 16-bit index with subindex.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

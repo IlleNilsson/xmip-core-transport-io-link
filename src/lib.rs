@@ -28,9 +28,11 @@ mod settings;
 use std::sync::{Arc, Mutex, PoisonError};
 use std::time::{Duration, Instant};
 
+use codec::hex::prefixed_number;
 pub use device::Device;
 pub use isdu::{DATA_MAX, Isdu};
 pub use m_sequence::{Channel, DeviceMessage, Kind, MasterMessage};
+use net::Target;
 use serial::{Framing, SerialTransport};
 use transport::arrived::next_arrival;
 use transport::error::{Result, protocol_error};
@@ -75,7 +77,8 @@ impl IoLinkTransport {
 
     /// The device presents `process_in` bytes of process data in.
     #[must_use]
-    pub const fn with_process_in(mut self, process_in: usize) -> Self {
+    #[cfg(test)]
+    const fn with_process_in(mut self, process_in: usize) -> Self {
         self.process_in = process_in;
         self
     }
@@ -98,14 +101,7 @@ impl IoLinkTransport {
     /// `iolink://<port>/0x<index>/<sub>`.
     #[must_use]
     pub fn origin(&self, index: u16, subindex: u8) -> String {
-        let port = self.line.origin();
-        let port = port
-            .strip_prefix("serial://")
-            .unwrap_or(&port)
-            .split('?')
-            .next()
-            .unwrap_or_default();
-        format!("iolink://{port}/{index:#06x}/{subindex}")
+        format!("iolink://{}/{index:#06x}/{subindex}", self.line.port())
     }
 
     /// One M-sequence: the master message on the line, the device message
@@ -144,7 +140,8 @@ impl IoLinkTransport {
     ///
     /// # Errors
     /// As [`Self::exchange`].
-    pub fn read_page(&self, address: u8) -> Result<u8> {
+    #[cfg(test)]
+    fn read_page(&self, address: u8) -> Result<u8> {
         let answer = self.exchange(&MasterMessage::read(Kind::Type0, Channel::Page, address))?;
         answer
             .on_request
@@ -224,7 +221,7 @@ impl IoLinkTransport {
     ///
     /// # Errors
     /// Over [`DATA_MAX`], or a device that answers negatively.
-    pub fn write_parameter(&self, index: u16, subindex: u8, bytes: &[u8]) -> Result<()> {
+    fn write_parameter(&self, index: u16, subindex: u8, bytes: &[u8]) -> Result<()> {
         let answer = self.transfer(&Isdu::write(index, subindex, bytes)?)?;
         match answer.service {
             Service::WriteResponsePositive => Ok(()),
@@ -236,7 +233,7 @@ impl IoLinkTransport {
     ///
     /// # Errors
     /// A device that answers negatively.
-    pub fn read_parameter(&self, index: u16, subindex: u8) -> Result<Vec<u8>> {
+    fn read_parameter(&self, index: u16, subindex: u8) -> Result<Vec<u8>> {
         let answer = self.transfer(&Isdu::read(index, subindex))?;
         match answer.service {
             Service::ReadResponsePositive => Ok(answer.data),
@@ -262,7 +259,9 @@ impl IoLinkTransport {
 
     /// The parameter a target names, or the configured one.
     fn resolve(&self, target: &str) -> Result<(u16, u8)> {
-        let path = match transport::socket::target("iolink", target) {
+        let path = match Target::under(&["iolink"], target)
+            .map(|named| (named.authority(), named.path()))
+        {
             Some((_, path)) => path,
             None => target,
         };
@@ -271,10 +270,7 @@ impl IoLinkTransport {
         }
         let bad = || protocol_error(format!("{target:?} is not 0x<index>/<sub>"));
         let (index, subindex) = path.split_once('/').ok_or_else(bad)?;
-        let index = index
-            .strip_prefix("0x")
-            .and_then(|hex| u16::from_str_radix(hex, 16).ok())
-            .ok_or_else(bad)?;
+        let index = prefixed_number(index).map_err(|_| bad())?;
         Ok((index, subindex.parse().map_err(|_| bad())?))
     }
 }
