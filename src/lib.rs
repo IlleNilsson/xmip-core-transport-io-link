@@ -16,6 +16,10 @@
 //! from the type how long each message is, and the loopback line is the
 //! serial technology's own.
 //!
+//! **A receive is an ISDU read, which consumes nothing at the device**, so
+//! its verdict has nothing to tell it, whichever it is: a cycle that did not
+//! complete loses nothing, and the next read finds the parameter again.
+//!
 //! The origin URI names the port and the parameter:
 //! `iolink://<port>/0x0100/0`. A target is the same, or a bare
 //! `0x<index>/<sub>`, or nothing for the configured parameter.
@@ -38,7 +42,7 @@ use transport::arrived::next_arrival;
 use transport::error::{Result, protocol_error};
 use transport::held::Held;
 use transport::loopback::{FarEnd, LOOPBACK_TIMEOUT, Loopback};
-use transport::{Arrived, Directions, Transport};
+use transport::{Acknowledgement, Arrived, Directions, Transport};
 
 use crate::isdu::Service;
 
@@ -254,7 +258,8 @@ impl IoLinkTransport {
             .framed(Framing::Fixed(length))
             .receive()
             .and_then(|arrived| next_arrival(arrived, "nothing came off the line"))
-            .map(|arrived| arrived.bytes)
+            .and_then(Arrived::taken)
+            .map(|taken| taken.bytes)
     }
 
     /// The parameter a target names, or the configured one.
@@ -288,12 +293,20 @@ impl Transport for IoLinkTransport {
         Directions::BOTH
     }
 
-    /// One read of the parameter: its bytes as one Stream.
+    fn arrivals(&self) -> transport::Arrivals {
+        transport::Arrivals::Ordered("a poll reads again what is not yet told")
+    }
+
+    /// One read of the parameter: its bytes as one Stream, whole. The
+    /// verdict has nothing to tell the device, whichever it is: an ISDU read
+    /// consumes nothing, so a cycle that did not complete loses nothing —
+    /// the next read finds the parameter again.
     fn receive(&self) -> Result<Vec<Arrived>> {
         let bytes = self.read_parameter(self.index, self.subindex)?;
-        Ok(vec![Arrived::new(
+        Ok(vec![Arrived::whole(
             self.origin(self.index, self.subindex),
             bytes,
+            Acknowledgement::unconsumed(),
         )])
     }
 
@@ -341,7 +354,7 @@ impl Loopback for IoLinkTransport {
         let master = self.clone();
         Ok(Box::new(Held::new(
             self.origin(self.index, self.subindex),
-            move || next_arrival(master.receive()?, "nothing came back from the device"),
+            move || next_arrival(master.receive()?, "nothing came back from the device")?.taken(),
         )))
     }
 
@@ -417,16 +430,16 @@ mod tests {
         master
             .send("iolink://loopback/0x0200/1", &[1, 2, 3])
             .expect("another parameter");
-        assert_eq!(
-            master.clone().about(0x0200, 1).receive().expect("read")[0].bytes,
-            [1, 2, 3]
-        );
+        let reading = master.clone().about(0x0200, 1);
+        let read = reading.receive().expect("read").remove(0);
+        assert!(read.defers(), "a read consumes nothing: nothing to lose");
+        // A refused cycle loses nothing: the next read finds it again.
+        read.failed().expect("refused");
+        let again = reading.receive().expect("again").remove(0);
+        assert_eq!(again.taken().expect("taken").bytes, [1, 2, 3]);
         master.send("0x0200/1", &[]).expect("bare target, empty");
-        assert!(
-            master.clone().about(0x0200, 1).receive().expect("read")[0]
-                .bytes
-                .is_empty()
-        );
+        let read = reading.receive().expect("read").remove(0);
+        assert!(read.taken().expect("taken").bytes.is_empty());
         let error = master.send("", b"x").expect_err("no such parameter");
         assert!(error.message.contains("WriteResponseNegative"), "{error}");
         assert!(master.receive().is_err(), "no such parameter to read");
