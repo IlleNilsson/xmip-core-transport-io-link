@@ -33,11 +33,13 @@ use std::sync::{Arc, Mutex, PoisonError};
 use std::time::{Duration, Instant};
 
 use codec::hex::prefixed_number;
+use context::property::IO_LINK_PORT;
 pub use device::Device;
 pub use isdu::{DATA_MAX, Isdu};
 pub use m_sequence::{Channel, DeviceMessage, Kind, MasterMessage};
 use net::Target;
 use serial::{Framing, SerialTransport};
+use transport::ArrivalIdentity;
 use transport::arrived::next_arrival;
 use transport::error::{Result, protocol_error};
 use transport::held::Held;
@@ -303,11 +305,15 @@ impl Transport for IoLinkTransport {
     /// the next read finds the parameter again.
     fn receive(&self) -> Result<Vec<Arrived>> {
         let bytes = self.read_parameter(self.index, self.subindex)?;
-        Ok(vec![Arrived::whole(
-            self.origin(self.index, self.subindex),
-            bytes,
-            Acknowledgement::unconsumed(),
-        )])
+        Ok(vec![
+            Arrived::whole(
+                self.origin(self.index, self.subindex),
+                bytes,
+                Acknowledgement::unconsumed(),
+            )
+            .scheduled()
+            .observing(IO_LINK_PORT, self.line.port().to_string()),
+        ])
     }
 
     /// One write of `bytes` to the parameter `target` names.
@@ -340,6 +346,10 @@ impl IoLinkTransport {
 }
 
 impl Loopback for IoLinkTransport {
+    fn arrival_identity(&self) -> ArrivalIdentity {
+        ArrivalIdentity::Named(&[context::property::IO_LINK_PORT])
+    }
+
     /// A Stream travels as one ISDU, and an ISDU is at most 238 bytes with
     /// its framing.
     fn ceiling(&self) -> Option<usize> {
