@@ -299,6 +299,10 @@ impl Transport for IoLinkTransport {
         transport::Arrivals::Ordered("a poll reads again what is not yet told")
     }
 
+    fn waiting(&self) -> transport::Waiting {
+        transport::Waiting::Polled("a read of the parameter returns at once")
+    }
+
     /// One read of the parameter: its bytes as one Stream, whole. The
     /// verdict has nothing to tell the device, whichever it is: an ISDU read
     /// consumes nothing, so a cycle that did not complete loses nothing —
