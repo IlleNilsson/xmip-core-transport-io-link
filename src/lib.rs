@@ -453,7 +453,7 @@ mod tests {
         assert_eq!(again.taken().expect("taken").bytes, [1, 2, 3]);
         master.send("0x0200/1", &[]).expect("bare target, empty");
         let read = reading.receive().expect("read").remove(0);
-        assert!(read.taken().expect("taken").bytes.is_empty());
+        assert_eq!(read.taken().expect("taken").bytes, [] as [u8; 0]);
         let error = master.send("", b"x").expect_err("no such parameter");
         assert!(error.message.contains("WriteResponseNegative"), "{error}");
         assert!(master.receive().is_err(), "no such parameter to read");

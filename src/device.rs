@@ -210,7 +210,7 @@ mod tests {
         assert!(answer.process_invalid, "no process data in");
         let write =
             MasterMessage::write(Kind::Type1, Channel::Page, 0x10, &[0xaa, 0xbb]).expect("w");
-        assert!(device.answer(&write).on_request.is_empty());
+        assert_eq!(device.answer(&write).on_request, [] as [u8; 0]);
         let back = device.answer(&MasterMessage::read(Kind::Type1, Channel::Page, 0x10));
         assert_eq!(back.on_request, [0xaa, 0xbb]);
     }
