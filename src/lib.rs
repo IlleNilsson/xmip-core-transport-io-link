@@ -307,7 +307,7 @@ impl Transport for IoLinkTransport {
     /// verdict has nothing to tell the device, whichever it is: an ISDU read
     /// consumes nothing, so a cycle that did not complete loses nothing —
     /// the next read finds the parameter again.
-    fn receive(&self) -> Result<Vec<Arrived>> {
+    fn receive_up_to(&self, _most: usize) -> Result<Vec<Arrived>> {
         let bytes = self.read_parameter(self.index, self.subindex)?;
         Ok(vec![
             Arrived::whole(
@@ -320,8 +320,13 @@ impl Transport for IoLinkTransport {
         ])
     }
 
+    fn sending(&self) -> transport::Sending {
+        transport::Sending::Gathered("one ISDU carries the whole body")
+    }
+
     /// One write of `bytes` to the parameter `target` names.
-    fn send(&self, target: &str, bytes: &[u8]) -> Result<()> {
+    fn send_from(&self, target: &str, outgoing: transport::Outgoing<'_>) -> Result<()> {
+        let bytes: &[u8] = &outgoing.gather()?;
         let (index, subindex) = self.resolve(target)?;
         self.write_parameter(index, subindex, bytes)
     }
