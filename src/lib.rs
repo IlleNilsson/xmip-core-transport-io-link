@@ -5,7 +5,7 @@
 //! writing it an ISDU write, and a Stream travels as one ISDU, which is
 //! why [`DATA_MAX`] is the ceiling.
 //!
-//! IO-Link is the last metre of the plant: one sensor or actuator on one
+//! IO-Link is the last meter of the plant: one sensor or actuator on one
 //! three-wire cable to one master port, a 24 volt signal driven at up to
 //! 230 kilobaud. What is here is the M-sequence — the one shape everything
 //! on the line has ([`m_sequence`]) — the indexed service data unit and its
