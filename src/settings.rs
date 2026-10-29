@@ -56,6 +56,9 @@ impl Configured for IoLinkTransport {
         ],
     };
 
+    /// The schemes a Location's address is entered with to choose this technology.
+    const SCHEMES: &'static [&'static str] = &["iolink"];
+
     fn configured(address: &str, settings: &Read) -> Result<Self> {
         let rate = settings.text("rate");
         let baud = RATES
