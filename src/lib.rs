@@ -392,7 +392,7 @@ impl Loopback for IoLinkTransport {
 mod tests {
     use super::*;
 
-    /// The shapes a protocol breaks on, as the Playground lists them, cut
+    /// The shapes a protocol breaks on, as the Essentials lists them, cut
     /// to the ceiling where they are longer.
     fn edge_payloads() -> Vec<(&'static str, Vec<u8>)> {
         vec![
