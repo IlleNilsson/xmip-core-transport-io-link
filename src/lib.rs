@@ -29,8 +29,9 @@ pub mod isdu;
 pub mod m_sequence;
 mod settings;
 
-use std::sync::{Arc, Mutex, PoisonError};
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
+use xcore::lock::Locked;
 
 use codec::hex::prefixed_number;
 use context::property::IO_LINK_PORT;
@@ -122,10 +123,7 @@ impl IoLinkTransport {
         if let Some(device) = &self.device {
             let heard = self.read_line(bytes.len())?;
             let heard = MasterMessage::decode(&heard, master.process_out.len())?;
-            let answer = device
-                .lock()
-                .unwrap_or_else(PoisonError::into_inner)
-                .answer(&heard);
+            let answer = device.locked().answer(&heard);
             self.write_line(&answer.encode())?;
         }
         let process_in = if master.process_out.is_empty() {
