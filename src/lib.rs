@@ -270,9 +270,9 @@ impl IoLinkTransport {
             Some((_, path)) => path,
             None => target,
         };
-        if path.is_empty() {
+        let Some(path) = transport::destination::named(path) else {
             return Ok((self.index, self.subindex));
-        }
+        };
         let bad = || protocol_error(format!("{target:?} is not 0x<index>/<sub>"));
         let (index, subindex) = path.split_once('/').ok_or_else(bad)?;
         let index = prefixed_number(index).map_err(|_| bad())?;

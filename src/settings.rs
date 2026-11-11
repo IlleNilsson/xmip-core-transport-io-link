@@ -59,6 +59,11 @@ impl Configured for IoLinkTransport {
     /// The schemes a Location's address is entered with to choose this technology.
     const SCHEMES: &'static [&'static str] = &["iolink"];
 
+    /// The index and subindex settings: the address names only the port.
+    fn own_target(_address: &str) -> &str {
+        transport::destination::OWN
+    }
+
     fn configured(address: &str, settings: &Read) -> Result<Self> {
         let rate = settings.text("rate");
         let baud = RATES
@@ -78,7 +83,9 @@ impl Configured for IoLinkTransport {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::Device;
     use std::time::Duration;
+    use transport::Transport;
     use xcore::settings::Given;
 
     #[test]
@@ -98,5 +105,29 @@ mod tests {
             panic!("com4 is not a rate");
         };
         assert!(refused.message.contains("\"rate\""), "{}", refused.message);
+    }
+
+    #[test]
+    fn a_send_location_writes_its_parameter_and_a_target_naming_another_wins() {
+        let given = [
+            ("rate".to_string(), Given::Text("com3".to_string())),
+            ("index".to_string(), Given::Integer(0x0200)),
+        ];
+        let location = "iolink://COM4";
+        let mut near = IoLinkTransport::open(location, Applies::Send, &given).expect("built");
+        // This machine has no COM4: the master the Location built goes on
+        // the serial technology's in-process line, the far device on it.
+        near.line = SerialTransport::loopback();
+        let device = Device::new(0)
+            .with_parameter(0x0200, STREAM_PARAMETER.1, Vec::new())
+            .with_parameter(0x0300, 1, Vec::new());
+        let near = near.attached(device);
+        near.send(IoLinkTransport::own_target(location), b"own parameter")
+            .expect("its own");
+        near.send("0x0300/1", b"other").expect("another");
+        let own = near.read_parameter(0x0200, STREAM_PARAMETER.1);
+        assert_eq!(own.expect("its own"), b"own parameter");
+        let other = near.read_parameter(0x0300, 1).expect("another");
+        assert_eq!(other, b"other");
     }
 }
