@@ -98,13 +98,6 @@ impl IoLinkTransport {
         self
     }
 
-    /// Give up on a device that stays busy.
-    #[must_use]
-    pub const fn timing_out_after(mut self, timeout: Duration) -> Self {
-        self.timeout = timeout;
-        self
-    }
-
     /// `iolink://<port>/0x<index>/<sub>`.
     #[must_use]
     pub fn origin(&self, index: u16, subindex: u8) -> String {

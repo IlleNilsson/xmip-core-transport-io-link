@@ -6,6 +6,10 @@ A send target is read by `net::Target` in [xmip-core-library-net](https://github
 
 A Send Location writes the parameter its `index` and `subindex` settings name, through the port its address names: it sends to the empty target (`Configured::own_target`, `transport::destination::OWN`), which it reads, through `transport::destination::named`, as that parameter. A target naming another still wins — `0x0300/1` (ADR-0064, amendment 2026-11-10).
 
+Every M-sequence is written and its answer read through the one port its
+address names, which `xmip-core-transport-serial` keeps open between the two,
+so a device's answer that comes before the read is read.
+
 A `0x` number in a target is read by `codec::hex::prefixed_number` in [xmip-core-library-codec](https://github.com/IlleNilsson/xmip-core-library-codec), which refuses a sign; until 2026-09-28 it was read with `from_str_radix`, which took `0x+7e8`.
 
 ## Acknowledgement
