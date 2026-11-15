@@ -46,13 +46,11 @@ impl Configured for IoLinkTransport {
                 meaning: "The subindex of the parameter that is the Stream.",
                 applies: Applies::Both,
             },
-            Setting {
-                name: "timeout",
-                kind: Kind::Duration,
-                presence: Presence::Default(Fixed::Duration(DEFAULT_TIMEOUT)),
-                meaning: "How long a device that stays busy is waited on.",
-                applies: Applies::Both,
-            },
+            transport::configured::timeout(
+                Applies::Both,
+                Some(DEFAULT_TIMEOUT),
+                "How long a device that stays busy is waited on.",
+            ),
         ],
     };
 
@@ -62,6 +60,10 @@ impl Configured for IoLinkTransport {
     /// The index and subindex settings: the address names only the port.
     fn own_target(_address: &str) -> &str {
         transport::destination::OWN
+    }
+
+    fn timeout_kept(&mut self) -> Option<&mut dyn transport::configured::TimeoutKept> {
+        Some(&mut self.timeout)
     }
 
     fn configured(address: &str, settings: &Read) -> Result<Self> {
@@ -74,9 +76,7 @@ impl Configured for IoLinkTransport {
             .map_err(|_| protocol_error("an index is at most 0xffff"))?;
         let subindex = u8::try_from(settings.integer("subindex"))
             .map_err(|_| protocol_error("a subindex is at most 0xff"))?;
-        Ok(Self::new(SerialTransport::new(address, baud))
-            .about(index, subindex)
-            .timing_out_after(settings.duration("timeout")))
+        Ok(Self::new(SerialTransport::new(address, baud)).about(index, subindex))
     }
 }
 
