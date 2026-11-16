@@ -39,7 +39,7 @@ pub use device::Device;
 pub use isdu::{DATA_MAX, Isdu};
 pub use m_sequence::{Channel, DeviceMessage, Kind, MasterMessage};
 use net::Target;
-use serial::{Framing, SerialTransport};
+use serial::{Exchange, Framing, SerialTransport};
 use transport::ArrivalIdentity;
 use transport::arrived::next_arrival;
 use transport::error::{Result, protocol_error};
@@ -105,19 +105,24 @@ impl IoLinkTransport {
     }
 
     /// One M-sequence: the master message on the line, the device message
-    /// off it.
+    /// off it, the port held for both.
     ///
     /// # Errors
     /// A line that could not be written or read, or a device message that
     /// is not one.
     pub fn exchange(&self, master: &MasterMessage) -> Result<DeviceMessage> {
+        self.sequence(&mut self.line.exchanging(), master)
+    }
+
+    /// One M-sequence on the port `line` holds.
+    fn sequence(&self, line: &mut Exchange<'_>, master: &MasterMessage) -> Result<DeviceMessage> {
         let bytes = master.encode();
-        self.write_line(&bytes)?;
+        line.transmit(&Framing::Fixed(bytes.len()), &bytes)?;
         if let Some(device) = &self.device {
-            let heard = self.read_line(bytes.len())?;
+            let heard = self.read_line(line, bytes.len())?;
             let heard = MasterMessage::decode(&heard, master.process_out.len())?;
-            let answer = device.locked().answer(&heard);
-            self.write_line(&answer.encode())?;
+            let answer = device.locked().answer(&heard).encode();
+            line.transmit(&Framing::Fixed(answer.len()), &answer)?;
         }
         let process_in = if master.process_out.is_empty() {
             0
@@ -129,7 +134,7 @@ impl IoLinkTransport {
         } else {
             0
         };
-        let answer = self.read_line(DeviceMessage::length(process_in, want))?;
+        let answer = self.read_line(line, DeviceMessage::length(process_in, want))?;
         DeviceMessage::decode(&answer, process_in)
     }
 
@@ -165,33 +170,33 @@ impl IoLinkTransport {
     }
 
     /// One ISDU transfer: `request` across the channel two bytes at a
-    /// time, the response back the same way.
+    /// time, the response back the same way. The port is held for the
+    /// whole of it: another Location's M-sequence between two of this one's
+    /// would reach the device as part of this ISDU.
     ///
     /// # Errors
     /// A device that stays busy past the timeout, or answers what is not
     /// an ISDU.
     pub fn transfer(&self, request: &Isdu) -> Result<Isdu> {
+        let line = &mut self.line.exchanging();
         let bytes = request.encode();
         let mut address = isdu::START;
         for pair in bytes.chunks(2) {
             let mut two = pair.to_vec();
             two.resize(2, 0);
-            self.exchange(&MasterMessage::write(
-                Kind::Type1,
-                Channel::Isdu,
-                address,
-                &two,
-            )?)?;
+            self.sequence(
+                line,
+                &MasterMessage::write(Kind::Type1, Channel::Isdu, address, &two)?,
+            )?;
             address = (address + 1) & isdu::COUNT_MASK;
         }
         let deadline = Instant::now() + self.timeout;
         let mut response = loop {
             let first = self
-                .exchange(&MasterMessage::read(
-                    Kind::Type1,
-                    Channel::Isdu,
-                    isdu::START,
-                ))?
+                .sequence(
+                    line,
+                    &MasterMessage::read(Kind::Type1, Channel::Isdu, isdu::START),
+                )?
                 .on_request;
             if first.first() != Some(&isdu::BUSY) {
                 break first;
@@ -205,7 +210,10 @@ impl IoLinkTransport {
         let mut address = 0;
         while response.len() < length {
             let more = self
-                .exchange(&MasterMessage::read(Kind::Type1, Channel::Isdu, address))?
+                .sequence(
+                    line,
+                    &MasterMessage::read(Kind::Type1, Channel::Isdu, address),
+                )?
                 .on_request;
             response.extend_from_slice(&more);
             address = (address + 1) & isdu::COUNT_MASK;
@@ -238,21 +246,13 @@ impl IoLinkTransport {
         }
     }
 
-    fn write_line(&self, bytes: &[u8]) -> Result<()> {
-        self.line
-            .clone()
-            .framed(Framing::Fixed(bytes.len()))
-            .send("", bytes)
-    }
-
-    fn read_line(&self, length: usize) -> Result<Vec<u8>> {
-        self.line
-            .clone()
-            .framed(Framing::Fixed(length))
-            .receive()
-            .and_then(|arrived| next_arrival(arrived, "nothing came off the line"))
-            .and_then(Arrived::taken)
-            .map(|taken| taken.bytes)
+    /// `length` bytes off the port `line` holds, waiting at most the
+    /// line's own timeout.
+    fn read_line(&self, line: &mut Exchange<'_>, length: usize) -> Result<Vec<u8>> {
+        next_arrival(
+            line.receive(&Framing::Fixed(length), self.line.timeout())?,
+            "nothing came off the line",
+        )
     }
 
     /// The parameter a target names, or the configured one.
@@ -456,6 +456,31 @@ mod tests {
         assert!(master.send("0200/1", b"x").is_err(), "not hex");
         assert_eq!(master.read_page(0x08).expect("page"), 0x23);
         assert_eq!(master.cycle(&[9, 9]).expect("cycle"), [0, 0]);
+    }
+
+    /// A Send and a Receive Location on one port each take whole turns on
+    /// it: an ISDU is written and read with the port held throughout, so
+    /// one Location's M-sequences never reach the device inside the other's
+    /// ISDU.
+    #[test]
+    fn a_send_and_a_receive_on_one_port_each_take_whole_isdus() {
+        const ROUNDS: usize = 200;
+        let sending = IoLinkTransport::loopback();
+        let receiving = sending.clone();
+        let (index, subindex) = STREAM_PARAMETER;
+        std::thread::scope(|scope| {
+            scope.spawn(|| {
+                for _ in 0..ROUNDS {
+                    sending.send("", b"stream").expect("written");
+                }
+            });
+            scope.spawn(|| {
+                for _ in 0..ROUNDS {
+                    let read = receiving.read_parameter(index, subindex).expect("read");
+                    assert!(read.is_empty() || read == b"stream", "{read:?}");
+                }
+            });
+        });
     }
 
     #[test]
