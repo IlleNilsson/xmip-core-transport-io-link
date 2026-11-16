@@ -10,6 +10,14 @@ Every M-sequence is written and its answer read through the one port its
 address names, which `xmip-core-transport-serial` keeps open between the two,
 so a device's answer that comes before the read is read.
 
+Every IO-Link Location on a node naming one port goes through that port's
+one handle (ADR-0064, amendment 2026-11-15): the master takes it from what
+the node's Locations share (`Configured::shared_by`), so a Send and a Receive
+Location on one device both reach it, where until 2026-11-15 the second was
+refused the port. The port is held for an M-sequence whole, and for an ISDU
+transfer whole (`serial::Exchange`), as another Location's M-sequence inside
+one would reach the device as part of it.
+
 A `0x` number in a target is read by `codec::hex::prefixed_number` in [xmip-core-library-codec](https://github.com/IlleNilsson/xmip-core-library-codec), which refuses a sign; until 2026-09-28 it was read with `from_str_radix`, which took `0x+7e8`.
 
 ## Acknowledgement

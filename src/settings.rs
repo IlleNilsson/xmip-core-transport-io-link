@@ -1,9 +1,12 @@
 //! What an IO-Link Location is configured with, declared once and read
-//! through (ADR-0064, amendment 2026-09-26).
+//! through (ADR-0064, amendment 2026-09-26), and the port it takes from what
+//! the Locations of its node share (amendment 2026-11-15).
+
+use std::sync::Arc;
 
 use serial::SerialTransport;
-use transport::Configured;
 use transport::error::{Result, protocol_error};
+use transport::{Configured, Sharing};
 use xcore::settings::{Applies, Fixed, Kind, Presence, Read, Setting, Settings};
 
 use crate::{DEFAULT_TIMEOUT, IoLinkTransport, STREAM_PARAMETER};
@@ -64,6 +67,16 @@ impl Configured for IoLinkTransport {
 
     fn timeout_kept(&mut self) -> Option<&mut dyn transport::configured::TimeoutKept> {
         Some(&mut self.timeout)
+    }
+
+    /// The port every Location naming the master's port on the node goes
+    /// through, so a Send and a Receive Location on one device each take
+    /// whole turns on it.
+    fn shared_by(self, sharing: &Arc<dyn Sharing>) -> Self {
+        Self {
+            line: self.line.shared_by(sharing),
+            ..self
+        }
     }
 
     fn configured(address: &str, settings: &Read) -> Result<Self> {
@@ -129,5 +142,29 @@ mod tests {
         assert_eq!(own.expect("its own"), b"own parameter");
         let other = near.read_parameter(0x0300, 1).expect("another");
         assert_eq!(other, b"other");
+    }
+
+    /// Two Locations on one master port take its one port from what their
+    /// node shares, so what one writes on the line the other reads off it,
+    /// where a port of its own reads nothing.
+    #[test]
+    fn locations_on_one_port_take_its_one_port_from_their_node() {
+        use serial::Framing;
+        use transport::loopback::LOOPBACK_TIMEOUT;
+        let node: Arc<dyn Sharing> = Arc::new(transport::Shared::default());
+        let first = IoLinkTransport::new(SerialTransport::loopback()).shared_by(&node);
+        let second = IoLinkTransport::new(SerialTransport::loopback()).shared_by(&node);
+        let alone = IoLinkTransport::new(SerialTransport::loopback());
+        let framing = Framing::Fixed(3);
+        let sent = first.line.exchanging().transmit(&framing, b"abc");
+        sent.expect("sent");
+        let read = alone.line.exchanging().receive(&framing, LOOPBACK_TIMEOUT);
+        assert_eq!(read.expect("quiet"), None, "a port of its own");
+        let read = second.line.exchanging().receive(&framing, LOOPBACK_TIMEOUT);
+        assert_eq!(
+            read.expect("read"),
+            Some(b"abc".to_vec()),
+            "one port for both"
+        );
     }
 }
