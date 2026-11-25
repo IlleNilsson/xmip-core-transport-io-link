@@ -74,6 +74,14 @@ impl Device {
         &self.process_out
     }
 
+    /// Whether the device holds no ISDU in hand: no request arriving and no
+    /// response the master has not read whole — between two transfers, as
+    /// a device on a line is once its master's write is answered.
+    #[must_use]
+    pub const fn idle(&self) -> bool {
+        self.request.is_empty() && self.response.is_none()
+    }
+
     /// What the device presents as process data in from now on.
     #[cfg(test)]
     fn set_process_in(&mut self, bytes: &[u8]) {
@@ -241,6 +249,7 @@ mod tests {
             [isdu::BUSY, 0],
             "nothing asked yet"
         );
+        assert!(device.idle(), "nothing in hand");
         let request = Isdu::write(0x0100, 0, &[1, 2, 3]).expect("write").encode();
         let mut address = isdu::START;
         for pair in request.chunks(2) {
@@ -252,6 +261,7 @@ mod tests {
             address = (address + 1) & isdu::COUNT_MASK;
         }
         assert_eq!(device.parameter(0x0100, 0), Some(&[1, 2, 3][..]));
+        assert!(!device.idle(), "its response not read yet");
         let first = device.answer(&MasterMessage::read(
             Kind::Type1,
             Channel::Isdu,
@@ -264,6 +274,7 @@ mod tests {
         );
         let rest = device.answer(&MasterMessage::read(Kind::Type1, Channel::Isdu, 0));
         assert_eq!(rest.on_request[0], 0x51 ^ 3);
+        assert!(device.idle(), "its response read whole");
         let missing = Isdu::write(0x0200, 0, &[]).expect("write").encode();
         for (n, pair) in missing.chunks(2).enumerate() {
             let mut two = pair.to_vec();

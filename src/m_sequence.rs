@@ -45,6 +45,19 @@ pub enum Kind {
 }
 
 impl Kind {
+    /// The type two bits of the check byte name.
+    ///
+    /// # Errors
+    /// Type 3, which is reserved.
+    fn from_bits(bits: u8) -> Result<Self> {
+        match bits & 0x03 {
+            0 => Ok(Self::Type0),
+            1 => Ok(Self::Type1),
+            2 => Ok(Self::Type2),
+            _ => Err(protocol_error("M-sequence type 3 is reserved")),
+        }
+    }
+
     /// The on-request bytes this type carries each way.
     #[must_use]
     pub const fn on_request(self) -> usize {
@@ -156,6 +169,22 @@ impl MasterMessage {
         2 + process_out + if read { 0 } else { kind.on_request() }
     }
 
+    /// How long the master message `read` opens is, told by its first two
+    /// bytes, the control's read bit and the type, where it carries no
+    /// process data out, as no message on the ISDU and page channels a
+    /// Stream travels on does: what a device reads a message off its line
+    /// by (`serial::Framing::Measured`), or `None` while fewer than two came.
+    ///
+    /// # Errors
+    /// Type 3, which is reserved.
+    pub fn measure(read: &[u8]) -> Result<Option<usize>> {
+        let (Some(control), Some(check)) = (read.first(), read.get(1)) else {
+            return Ok(None);
+        };
+        let kind = Kind::from_bits(check >> 6)?;
+        Ok(Some(Self::length(kind, 0, control & 0x80 != 0)))
+    }
+
     /// The message `bytes` carry, `process_out` bytes of process data out
     /// expected before the on-request data.
     ///
@@ -174,12 +203,7 @@ impl MasterMessage {
             ));
         }
         let read = bytes[0] & 0x80 != 0;
-        let kind = match bytes[1] >> 6 {
-            0 => Kind::Type0,
-            1 => Kind::Type1,
-            2 => Kind::Type2,
-            _ => return Err(protocol_error("M-sequence type 3 is reserved")),
-        };
+        let kind = Kind::from_bits(bytes[1] >> 6)?;
         if bytes.len() != Self::length(kind, process_out, read) {
             return Err(protocol_error(
                 "a master message that is not its type's length",
@@ -272,6 +296,26 @@ mod tests {
         assert_eq!(wire.len(), 1);
         assert_eq!(wire[0] & 0xc0, 0x80);
         assert_eq!(DeviceMessage::decode(&wire, 0).expect("decode"), device);
+    }
+
+    /// A device on a line reads each master message by the length its
+    /// first two bytes tell (the owner, 2026-11-25: *just do your best for
+    /// now*): until 2026-11-25 only the master, which wrote it, knew it.
+    #[test]
+    fn a_master_message_says_its_length_in_its_first_two_bytes() {
+        let read = MasterMessage::read(Kind::Type1, Channel::Isdu, 0x10).encode();
+        let write = MasterMessage::write(Kind::Type1, Channel::Isdu, 0x10, &[1, 2]).expect("w");
+        let write = write.encode();
+        let page = MasterMessage::write(Kind::Type0, Channel::Page, 0x02, &[7]).expect("p");
+
+        assert_eq!(MasterMessage::measure(&read[..1]).expect("short"), None);
+        assert_eq!(MasterMessage::measure(&read).expect("read"), Some(2));
+        assert_eq!(MasterMessage::measure(&write[..2]).expect("write"), Some(4));
+        assert_eq!(
+            MasterMessage::measure(&page.encode()).expect("page"),
+            Some(3)
+        );
+        assert!(MasterMessage::measure(&[0x81, 0xc0]).is_err(), "type 3");
     }
 
     #[test]

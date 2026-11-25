@@ -20,6 +20,8 @@ one would reach the device as part of it.
 
 A `0x` number in a target is read by `codec::hex::prefixed_number` in [xmip-core-library-codec](https://github.com/IlleNilsson/xmip-core-library-codec), which refuses a sign; until 2026-09-28 it was read with `from_str_radix`, which took `0x+7e8`.
 
+A device at the far end of a real line reads each master message by the length its first two bytes tell, the control's read bit and the type, where no process data out rides (`MasterMessage::measure`), and says when it holds no ISDU in hand, between two transfers (`Device::idle`). The root's service test stands one so on a pseudo-terminal and a node's IO-Link Send Location writes a Stream to it (the owner, 2026-11-25: *just do your best for now*). The serial dependency here leaves out serial's port, so a build that links IO-Link brings it.
+
 ## Acknowledgement
 
 A receive is an ISDU read of the parameter, which consumes nothing at the
