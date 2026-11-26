@@ -23,41 +23,68 @@
 //! The origin URI names the port and the parameter:
 //! `iolink://<port>/0x0100/0`. A target is the same, or a bare
 //! `0x<index>/<sub>`, or nothing for the configured parameter.
+//!
+//! **Built with its `declaration` feature alone** the crate is
+//! [`declaration`], what a Location of it is configured with, and none of
+//! the code above, which is behind the default feature: what the surfaces'
+//! library carries (ADR-0064, amendment 2026-11-26). The parameter a Stream
+//! travels as and the wait a Location takes unless it says,
+//! `STREAM_PARAMETER` and `DEFAULT_TIMEOUT`, are declared there with it.
 
+#[cfg(feature = "default")]
+mod configured;
+#[cfg(feature = "declaration")]
+pub mod declaration;
+#[cfg(feature = "default")]
 pub mod device;
+#[cfg(feature = "default")]
 pub mod isdu;
+#[cfg(feature = "default")]
 pub mod m_sequence;
-mod settings;
 
+#[cfg(feature = "default")]
 use std::sync::{Arc, Mutex};
+#[cfg(feature = "default")]
 use std::time::{Duration, Instant};
+#[cfg(feature = "default")]
 use xcore::lock::Locked;
 
+#[cfg(feature = "default")]
 use codec::hex::prefixed_number;
+#[cfg(feature = "default")]
 use context::property::IO_LINK_PORT;
+#[cfg(feature = "default")]
+use declaration::DEFAULT_TIMEOUT;
+#[cfg(feature = "default")]
+pub use declaration::STREAM_PARAMETER;
+#[cfg(feature = "default")]
 pub use device::Device;
+#[cfg(feature = "default")]
 pub use isdu::{DATA_MAX, Isdu};
+#[cfg(feature = "default")]
 pub use m_sequence::{Channel, DeviceMessage, Kind, MasterMessage};
+#[cfg(feature = "default")]
 use net::Target;
+#[cfg(feature = "default")]
 use serial::{Exchange, Framing, SerialTransport};
+#[cfg(feature = "default")]
 use transport::ArrivalIdentity;
+#[cfg(feature = "default")]
 use transport::arrived::next_arrival;
+#[cfg(feature = "default")]
 use transport::error::{Result, protocol_error};
+#[cfg(feature = "default")]
 use transport::held::Held;
+#[cfg(feature = "default")]
 use transport::loopback::{FarEnd, LOOPBACK_TIMEOUT, Loopback};
+#[cfg(feature = "default")]
 use transport::{Acknowledgement, Arrived, Configured, Directions, Transport};
 
+#[cfg(feature = "default")]
 use crate::isdu::Service;
 
-/// The parameter a Stream travels as unless a target says otherwise: the
-/// first vendor-specific index.
-pub const STREAM_PARAMETER: (u16, u8) = (0x0100, 0);
-
-/// How long a master waits on a device that stays busy unless a Location
-/// says.
-pub const DEFAULT_TIMEOUT: Duration = Duration::from_secs(1);
-
 /// The master's side of one port, speaking to the device on it.
+#[cfg(feature = "default")]
 #[derive(Clone)]
 pub struct IoLinkTransport {
     line: SerialTransport,
@@ -68,6 +95,7 @@ pub struct IoLinkTransport {
     timeout: Duration,
 }
 
+#[cfg(feature = "default")]
 impl IoLinkTransport {
     /// A master on `line`, no process data, about [`STREAM_PARAMETER`].
     #[must_use]
@@ -273,10 +301,12 @@ impl IoLinkTransport {
     }
 }
 
+#[cfg(feature = "default")]
 fn refused(service: Service, data: &[u8]) -> transport::TransportError {
     protocol_error(format!("the device answered {service:?} with {data:02x?}"))
 }
 
+#[cfg(feature = "default")]
 impl Transport for IoLinkTransport {
     fn name(&self) -> &'static str {
         "io-link"
@@ -323,6 +353,7 @@ impl Transport for IoLinkTransport {
     }
 }
 
+#[cfg(feature = "default")]
 impl IoLinkTransport {
     /// Both ends on the serial technology's in-process line: a master and a
     /// device holding the Stream parameter empty, the loopback timeout on
@@ -345,6 +376,7 @@ impl IoLinkTransport {
     }
 }
 
+#[cfg(feature = "default")]
 impl Loopback for IoLinkTransport {
     fn arrival_identity(&self) -> ArrivalIdentity {
         ArrivalIdentity::Named(&[context::property::IO_LINK_PORT])

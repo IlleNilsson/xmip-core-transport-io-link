@@ -1,64 +1,21 @@
-//! What an IO-Link Location is configured with, declared once and read
-//! through (ADR-0064, amendment 2026-09-26), and the port it takes from what
-//! the Locations of its node share (amendment 2026-11-15).
+//! How an IO-Link Location is configured: `Configured`, reading the
+//! settings its [`declaration`](crate::declaration) declares once
+//! (ADR-0064, amendments 2026-09-26 and 2026-11-26), and the port it takes
+//! from what the Locations of its node share (amendment 2026-11-15).
 
 use std::sync::Arc;
 
 use serial::SerialTransport;
 use transport::error::{Result, protocol_error};
 use transport::{Configured, Sharing};
-use xcore::settings::{Applies, Fixed, Kind, Presence, Read, Setting, Settings};
+use xcore::settings::{Read, Settings};
 
-use crate::{DEFAULT_TIMEOUT, IoLinkTransport, STREAM_PARAMETER};
-
-/// The transmission rates IO-Link names, and the baud each is.
-const RATES: [(&str, u32); 3] = [("com1", 4_800), ("com2", 38_400), ("com3", 230_400)];
+use crate::IoLinkTransport;
+use crate::declaration::{self, RATES};
 
 impl Configured for IoLinkTransport {
-    /// The address is the serial port the master's port drives.
-    const SETTINGS: &'static Settings = &Settings {
-        technology: env!("CARGO_PKG_NAME"),
-        settings: &[
-            Setting {
-                name: "rate",
-                kind: Kind::Choice {
-                    choices: &["com1", "com2", "com3"],
-                },
-                presence: Presence::Required,
-                meaning: "The transmission rate the device speaks: com1 is 4800 baud, com2 \
-                          38400 and com3 230400.",
-                applies: Applies::Both,
-            },
-            Setting {
-                name: "index",
-                kind: Kind::Integer {
-                    minimum: 0,
-                    maximum: 0xffff,
-                },
-                presence: Presence::Default(Fixed::Integer(STREAM_PARAMETER.0 as i64)),
-                meaning: "The index of the parameter that is the Stream.",
-                applies: Applies::Both,
-            },
-            Setting {
-                name: "subindex",
-                kind: Kind::Integer {
-                    minimum: 0,
-                    maximum: 0xff,
-                },
-                presence: Presence::Default(Fixed::Integer(STREAM_PARAMETER.1 as i64)),
-                meaning: "The subindex of the parameter that is the Stream.",
-                applies: Applies::Both,
-            },
-            transport::configured::timeout(
-                Applies::Both,
-                Some(DEFAULT_TIMEOUT),
-                "How long a device that stays busy is waited on.",
-            ),
-        ],
-    };
-
-    /// The schemes a Location's address is entered with to choose this technology.
-    const SCHEMES: &'static [&'static str] = &["iolink"];
+    const SETTINGS: &'static Settings = declaration::SETTINGS;
+    const SCHEMES: &'static [&'static str] = declaration::SCHEMES;
 
     /// The index and subindex settings: the address names only the port.
     fn own_target(_address: &str) -> &str {
@@ -96,10 +53,10 @@ impl Configured for IoLinkTransport {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::Device;
+    use crate::{Device, STREAM_PARAMETER};
     use std::time::Duration;
     use transport::Transport;
-    use xcore::settings::Given;
+    use xcore::settings::{Applies, Given};
 
     #[test]
     fn io_link_declares_its_settings_and_reads_through_them() {
