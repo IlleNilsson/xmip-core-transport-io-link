@@ -26,9 +26,9 @@ net = { package = "xmip-core-library-net", git = "https://github.com/IlleNilsson
 # transport::Configured (ADR-0064, amendment 2026-09-26).
 xcore = { package = "xmip-core", git = "https://github.com/IlleNilsson/xmip-core", branch = "main" }
 # The carrier: the line framing an M-sequence travels in comes from serial,
-# without its default port feature — the framing is what IO-Link needs and it
-# is there on a box with no serial stack at all.
-serial = { package = "xmip-core-transport-serial", git = "https://github.com/IlleNilsson/xmip-core-transport-serial", branch = "main", default-features = false }
+# whole — its code is its default (ADR-0064, amendment 2026-11-26), and it
+# builds on a box with no serial stack at all, refusing a port none has.
+serial = { package = "xmip-core-transport-serial", git = "https://github.com/IlleNilsson/xmip-core-transport-serial", branch = "main" }
 
 [lints.rust]
 unsafe_code = "forbid"
