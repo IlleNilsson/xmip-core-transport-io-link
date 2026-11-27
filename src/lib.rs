@@ -25,11 +25,9 @@
 //! `0x<index>/<sub>`, or nothing for the configured parameter.
 //!
 //! **Built with its `declaration` feature alone** the crate is
-//! [`declaration`], what a Location of it is configured with, and none of
-//! the code above, which is behind the default feature: what the surfaces'
-//! library carries (ADR-0064, amendment 2026-11-26). The parameter a Stream
-//! travels as and the wait a Location takes unless it says,
-//! `STREAM_PARAMETER` and `DEFAULT_TIMEOUT`, are declared there with it.
+//! [`declaration`]. The parameter a Stream travels as and the wait a Location
+//! takes unless it says, `STREAM_PARAMETER` and `DEFAULT_TIMEOUT`, are
+//! declared there with it.
 
 #[cfg(feature = "default")]
 mod configured;
